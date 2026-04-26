@@ -78,6 +78,21 @@ CF_LOGPUSH_R2_PATH = "qlog/"
 AUTO_RENEW_BLOCKLISTS_OLDER_THAN = "42" # weeks
 
 ##################
+#---DEEPMARKET---#
+##################
+# Deployment target for the deepmarket app's privacy DNS API.
+# Exposes /resolve, /dns-json, /__health alongside the standard /dns-query.
+# Deploy with: npx wrangler deploy --env deepmarket
+[env.deepmarket]
+name = "deepmarket-dns"
+minify = true
+
+[env.deepmarket.vars]
+LOG_LEVEL = "info"
+WORKER_ENV = "production"
+CLOUD_PLATFORM = "cloudflare"
+
+##################
 #-----SECRETS----#
 ##################
 # only for documentation purposes
@@ -89,3 +104,5 @@ AUTO_RENEW_BLOCKLISTS_OLDER_THAN = "42" # weeks
 # CF_API_TOKEN = ""
 # CF_LOGPUSH_R2_SECRET_KEY = ""
 # CF_LOGPUSH_R2_ACCESS_KEY = ""
+# DEEPMARKET_API_KEY = ""  # optional shared secret for /resolve and /dns-json
+#                           # set with: wrangler secret put DEEPMARKET_API_KEY --env deepmarket

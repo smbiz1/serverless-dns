@@ -32,6 +32,26 @@ Cloudflare Workers is the easiest platform to setup `serverless-dns`:
 
 [![Deploy to Fastly](https://deploy.edgecompute.app/button)](https://deploy.edgecompute.app/deploy)
 
+#### Deepmarket fork (this repo)
+
+This fork adds a JSON DNS API on top of the upstream DoH endpoint for the
+deepmarket app. One click deploys this fork's code to your Cloudflare account:
+
+[![Deploy this fork to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/smbiz1/serverless-dns)
+
+After the deploy you'll have:
+
+- `GET /resolve?name=example.com&type=A` — JSON DNS lookup
+- `GET /dns-json?name=...` — alias of `/resolve`
+- `GET /__health` — liveness probe
+- `POST /dns-query` — standard RFC 8484 DoH (unchanged)
+
+See [`docs/DEEPMARKET_API.md`](./docs/DEEPMARKET_API.md) for the full request /
+response shape and an optional `DEEPMARKET_API_KEY` secret to gate access.
+
+`main` auto-syncs from upstream weekly via
+[`.github/workflows/sync-upstream.yml`](.github/workflows/sync-upstream.yml).
+
 For step-by-step instructions, refer:
 
 | Platform       | Difficulty | Runtime                                | Doc                                                                                     |

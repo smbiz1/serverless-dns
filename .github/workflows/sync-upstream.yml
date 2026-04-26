@@ -1,0 +1,50 @@
+name: sync-upstream
+
+# Keeps this fork's `main` synced with serverless-dns/serverless-dns@main.
+# Runs weekly and on demand. Tries a fast-forward first; falls back to a
+# merge commit once the fork has its own commits ahead of upstream (the
+# normal post-merge state). Fails loudly on merge conflicts so they get
+# noticed instead of silently passing.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream and fetch
+        run: |
+          git remote add upstream https://github.com/serverless-dns/serverless-dns.git
+          git fetch upstream main
+
+      - name: Sync main with upstream
+        run: |
+          if git merge --ff-only upstream/main; then
+            echo "main fast-forwarded (or already up to date)."
+          elif git merge upstream/main --no-edit -m "sync: merge upstream/main into fork"; then
+            echo "main merged upstream/main with a merge commit."
+          else
+            echo "::error::Merge conflicts syncing upstream/main into main. Resolve manually."
+            git merge --abort || true
+            exit 1
+          fi
+
+      - name: Push
+        run: git push origin main

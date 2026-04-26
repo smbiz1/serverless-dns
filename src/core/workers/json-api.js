@@ -218,9 +218,18 @@ function bearer(h) {
 
 function constantTimeEquals(a, b) {
   if (typeof a !== "string" || typeof b !== "string") return false;
-  if (a.length !== b.length) return false;
-  let r = 0;
-  for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  // Walk `b` (the configured secret) end-to-end so the work done depends on
+  // the secret's length, not on the attacker-controlled `a`. The length
+  // delta is folded into `r` via XOR so any mismatch — same length but
+  // different bytes, or different length — yields a non-zero result.
+  // `a.charCodeAt(i)` past the end returns NaN; `| 0` coerces that to 0
+  // without an input-length branch.
+  const lb = b.length;
+  let r = a.length ^ lb;
+  for (let i = 0; i < lb; i++) {
+    const ca = a.charCodeAt(i) | 0;
+    r |= ca ^ b.charCodeAt(i);
+  }
   return r === 0;
 }
 

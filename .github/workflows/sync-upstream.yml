@@ -1,9 +1,10 @@
 name: sync-upstream
 
-# Keeps this fork's `main` in lockstep with serverless-dns/serverless-dns@main.
-# Runs weekly and can be triggered on demand from the Actions tab.
-# Fast-forward only — if main has diverged the job fails so it never clobbers
-# local commits.
+# Keeps this fork's `main` synced with serverless-dns/serverless-dns@main.
+# Runs weekly and on demand. Tries a fast-forward first; falls back to a
+# merge commit once the fork has its own commits ahead of upstream (the
+# normal post-merge state). Fails loudly on merge conflicts so they get
+# noticed instead of silently passing.
 
 on:
   schedule:
@@ -33,13 +34,16 @@ jobs:
           git remote add upstream https://github.com/serverless-dns/serverless-dns.git
           git fetch upstream main
 
-      - name: Fast-forward main to upstream/main
+      - name: Sync main with upstream
         run: |
-          if git merge-base --is-ancestor HEAD upstream/main; then
-            git merge --ff-only upstream/main
+          if git merge --ff-only upstream/main; then
+            echo "main fast-forwarded (or already up to date)."
+          elif git merge upstream/main --no-edit -m "sync: merge upstream/main into fork"; then
+            echo "main merged upstream/main with a merge commit."
           else
-            echo "Fork main has commits not in upstream; skipping to avoid clobbering."
-            exit 0
+            echo "::error::Merge conflicts syncing upstream/main into main. Resolve manually."
+            git merge --abort || true
+            exit 1
           fi
 
       - name: Push

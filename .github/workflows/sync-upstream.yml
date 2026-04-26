@@ -1,0 +1,46 @@
+name: sync-upstream
+
+# Keeps this fork's `main` in lockstep with serverless-dns/serverless-dns@main.
+# Runs weekly and can be triggered on demand from the Actions tab.
+# Fast-forward only — if main has diverged the job fails so it never clobbers
+# local commits.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream and fetch
+        run: |
+          git remote add upstream https://github.com/serverless-dns/serverless-dns.git
+          git fetch upstream main
+
+      - name: Fast-forward main to upstream/main
+        run: |
+          if git merge-base --is-ancestor HEAD upstream/main; then
+            git merge --ff-only upstream/main
+          else
+            echo "Fork main has commits not in upstream; skipping to avoid clobbering."
+            exit 0
+          fi
+
+      - name: Push
+        run: git push origin main

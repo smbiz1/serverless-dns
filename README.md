@@ -49,8 +49,12 @@ After the deploy you'll have:
 See [`docs/DEEPMARKET_API.md`](./docs/DEEPMARKET_API.md) for the full request /
 response shape and an optional `DEEPMARKET_API_KEY` secret to gate access.
 
-`main` auto-syncs from upstream weekly via
-[`.github/workflows/sync-upstream.yml`](.github/workflows/sync-upstream.yml).
+Both upstreams (`serverless-dns/serverless-dns` and the vendored
+`Lissy93/web-check`) are tracked automatically by sync workflows that open
+a PR — never a direct push to `main` — gated by an inline `npm run build`
+smoke check. See [`docs/UPSTREAM_SYNC.md`](./docs/UPSTREAM_SYNC.md) for the
+flow, failure runbook, and the optional `WORKFLOWS_PAT` secret that lights
+up downstream CI on sync PRs.
 
 #### Combined: DNS proxy + Web-Check security audit
 

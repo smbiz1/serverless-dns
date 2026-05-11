@@ -33,6 +33,12 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          # Prefer a fine-grained PAT (stored as WORKFLOWS_PAT) so the PR this
+          # workflow opens triggers downstream workflows (build, lint).
+          # Falls back to GITHUB_TOKEN — in that case the sync PR's CI must
+          # be kicked off manually (close+reopen or empty push).
+          # See docs/UPSTREAM_SYNC.md.
+          token: ${{ secrets.WORKFLOWS_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Configure git
         run: |
@@ -101,7 +107,7 @@ jobs:
       - name: Open / update PR
         if: steps.behind.outputs.skip != 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.WORKFLOWS_PAT || secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           UPSTREAM_TIP=$(git rev-parse --short upstream/$UPSTREAM_REF)

@@ -1,0 +1,39 @@
+# Top-level compose for the combined cf-dns + Web-Check stack.
+#
+# - `web-check`   — Lissy93/web-check, vendored into ./web-check (MIT).
+#                   Provides the website security/audit GUI + API on :3000.
+# - `dns-worker`  — Optional local dev container for the serverless-dns
+#                   Worker, served via miniflare on :8787. Skipped by default
+#                   because most contributors deploy the Worker straight to
+#                   Cloudflare with `npx wrangler deploy`.
+#
+# Bring everything up:   docker compose up --build
+# Web-Check only:        docker compose up --build web-check
+# DNS worker only:       docker compose --profile dns up --build dns-worker
+
+services:
+  web-check:
+    build:
+      context: ./web-check
+    container_name: web-check
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    environment:
+      - PORT=3000
+      # Override these to point Web-Check at the DNS resolver exposed by
+      # the dns-worker service (or any external DoH endpoint).
+      - DNS_SERVER=${DNS_SERVER:-1.1.1.1}
+
+  dns-worker:
+    profiles: ["dns"]
+    image: node:20-bullseye
+    container_name: cf-dns-worker
+    working_dir: /app
+    command: sh -c "npm install --no-audit --no-fund && npx wrangler dev --local --ip 0.0.0.0 --port 8787"
+    ports:
+      - "8787:8787"
+    volumes:
+      - ./:/app
+    environment:
+      - NODE_ENV=development

@@ -1,0 +1,55 @@
+name: 🛠 Build
+
+# Runs the Worker bundle build on every PR + push to main.
+#
+# Distinct from pr.yml (which uses `pull_request_target` to lint and auto-
+# commit fmt fixes with the base repo's secrets): this workflow uses
+# `pull_request` and has *no* secrets, so it can safely run npm install on
+# arbitrary PR code without risking exfiltration via postinstall scripts.
+#
+# It also runs on `push` to main + sync branches so that whoever opens the
+# sync PR (via gh in the sync-* workflows) gets a clear signal of whether
+# the merged tree builds, independent of the PR-side workflow trigger.
+
+on:
+  pull_request:
+    branches:
+      - "main"
+  push:
+    branches:
+      - "main"
+      - "upstream-sync/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  worker-bundle:
+    name: Worker bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+
+      - name: Build (cloudflare worker bundle)
+        run: npm run build
+
+      - name: Assert bundle artifact exists
+        run: |
+          test -s dist/worker.js || (echo "::error::dist/worker.js missing or empty after build"; exit 1)
+          echo "Built dist/worker.js — $(wc -c < dist/worker.js) bytes"

@@ -1,10 +1,13 @@
 name: sync-upstream
 
-# Keeps this fork's `main` synced with serverless-dns/serverless-dns@main.
-# Runs weekly and on demand. Tries a fast-forward first; falls back to a
-# merge commit once the fork has its own commits ahead of upstream (the
-# normal post-merge state). Fails loudly on merge conflicts so they get
-# noticed instead of silently passing.
+# Pulls serverless-dns/serverless-dns@main into a sync branch, verifies the
+# Worker still builds against this fork's deepmarket changes, and opens a
+# PR so a human can eyeball the diff before it touches main.
+#
+# Runs weekly + on demand. Three outcomes:
+#   - no upstream changes  → exits quietly
+#   - clean merge + build  → opens / updates PR  upstream-sync/serverless-dns
+#   - merge conflict OR build failure → fails loudly, branch left for fixup
 
 on:
   schedule:
@@ -13,10 +16,17 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
+
+env:
+  SYNC_BRANCH: upstream-sync/serverless-dns
+  UPSTREAM_URL: https://github.com/serverless-dns/serverless-dns.git
+  UPSTREAM_REF: main
 
 jobs:
   sync:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout fork
         uses: actions/checkout@v4
@@ -29,22 +39,93 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Add upstream and fetch
+      - name: Fetch upstream
         run: |
-          git remote add upstream https://github.com/serverless-dns/serverless-dns.git
-          git fetch upstream main
+          git remote add upstream "$UPSTREAM_URL"
+          git fetch upstream "$UPSTREAM_REF"
 
-      - name: Sync main with upstream
+      - name: Skip if already up-to-date
+        id: behind
         run: |
-          if git merge --ff-only upstream/main; then
-            echo "main fast-forwarded (or already up to date)."
-          elif git merge upstream/main --no-edit -m "sync: merge upstream/main into fork"; then
-            echo "main merged upstream/main with a merge commit."
+          if git merge-base --is-ancestor "upstream/$UPSTREAM_REF" HEAD; then
+            echo "Up to date with upstream/$UPSTREAM_REF — nothing to sync."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::error::Merge conflicts syncing upstream/main into main. Resolve manually."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create / reset sync branch
+        if: steps.behind.outputs.skip != 'true'
+        run: |
+          # Start from main, then merge upstream/main on top. Force-reset the
+          # branch so reruns don't accumulate stale merge commits.
+          git checkout -B "$SYNC_BRANCH" main
+
+      - name: Merge upstream
+        if: steps.behind.outputs.skip != 'true'
+        id: merge
+        run: |
+          if git merge --ff-only "upstream/$UPSTREAM_REF"; then
+            echo "Fast-forwarded $SYNC_BRANCH onto upstream/$UPSTREAM_REF."
+            echo "mode=ff" >> "$GITHUB_OUTPUT"
+          elif git merge "upstream/$UPSTREAM_REF" --no-edit -m "sync: merge upstream/$UPSTREAM_REF into $SYNC_BRANCH"; then
+            echo "Merged upstream/$UPSTREAM_REF with a merge commit."
+            echo "mode=merge" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Merge conflicts pulling upstream/$UPSTREAM_REF. Resolve manually on branch $SYNC_BRANCH."
             git merge --abort || true
             exit 1
           fi
 
-      - name: Push
-        run: git push origin main
+      - name: Setup Node
+        if: steps.behind.outputs.skip != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        if: steps.behind.outputs.skip != 'true'
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+
+      - name: Verify build against fork's deepmarket changes
+        if: steps.behind.outputs.skip != 'true'
+        run: |
+          npm run build
+          test -s dist/worker.js || (echo "::error::dist/worker.js missing after upstream merge — fork's changes likely broken by upstream"; exit 1)
+
+      - name: Push sync branch
+        if: steps.behind.outputs.skip != 'true'
+        run: |
+          git push --force-with-lease origin "$SYNC_BRANCH"
+
+      - name: Open / update PR
+        if: steps.behind.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          UPSTREAM_TIP=$(git rev-parse --short upstream/$UPSTREAM_REF)
+          TITLE="sync: serverless-dns/serverless-dns@${UPSTREAM_TIP}"
+          BODY=$(cat <<EOF
+          Automated sync from upstream **serverless-dns/serverless-dns@${UPSTREAM_REF}**
+          (\`${UPSTREAM_TIP}\`) into this fork.
+
+          - Merge mode: \`${{ steps.merge.outputs.mode }}\`
+          - Worker bundle build passed inside the sync workflow against the
+            fork's deepmarket changes (\`src/core/workers/json-api.js\`,
+            \`wrangler.toml\` \`deepmarket\` env, etc.).
+          - Review the diff before merging; pay attention to anything that
+            touches \`src/core/\` or the worker entrypoint.
+
+          Triggered: ${{ github.event_name }}
+          EOF
+          )
+          if gh pr view "$SYNC_BRANCH" >/dev/null 2>&1; then
+            gh pr edit "$SYNC_BRANCH" --title "$TITLE" --body "$BODY"
+          else
+            gh pr create --base main --head "$SYNC_BRANCH" \
+              --title "$TITLE" --body "$BODY" \
+              --label upstream-sync || \
+            gh pr create --base main --head "$SYNC_BRANCH" \
+              --title "$TITLE" --body "$BODY"
+          fi

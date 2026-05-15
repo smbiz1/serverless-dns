@@ -30,6 +30,11 @@ module.exports = {
     "!*/",
     "!*.js",
     "!*.[mc]js",
+
+    // Vendored upstream Lissy93/web-check ships its own prettier+eslint
+    // config (incl. prettier-plugin-astro) and uses unrelated style rules.
+    // Excluded last so it wins over the JS re-include pattern above.
+    "web-check/**",
   ],
 
   plugins: ["prettier"],

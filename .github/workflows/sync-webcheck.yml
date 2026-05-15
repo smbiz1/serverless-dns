@@ -1,0 +1,152 @@
+name: sync-webcheck
+
+# Refreshes the vendored Lissy93/web-check tree under web-check/ from upstream
+# master. Opens a PR (does NOT push to main) so a human eyeballs the diff.
+#
+# Strategy: clone upstream into a scratch dir, drop the things we don't want
+# tracked (`.git`, heavy screenshots, lockfile churn), then mirror into
+# `web-check/` with rsync --delete. This keeps the directory a flat vendored
+# copy with no submodule / subtree state — the same shape as the initial
+# vendor commit — and avoids dragging in the multi-MB screenshot folder on
+# every refresh.
+
+on:
+  schedule:
+    # Tuesdays 06:00 UTC — offset from serverless-dns sync (Mondays) so we
+    # don't open two upstream PRs simultaneously.
+    - cron: "0 6 * * 2"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Upstream ref to sync from (branch, tag, or sha)"
+        required: false
+        default: "master"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  SYNC_BRANCH: upstream-sync/web-check
+  UPSTREAM_URL: https://github.com/Lissy93/web-check.git
+  UPSTREAM_REF: ${{ github.event.inputs.ref || 'master' }}
+  VENDOR_DIR: web-check
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          # Prefer a fine-grained PAT (stored as WORKFLOWS_PAT) so the PR this
+          # workflow opens triggers downstream workflows (build, lint).
+          # Falls back to GITHUB_TOKEN — see docs/UPSTREAM_SYNC.md.
+          token: ${{ secrets.WORKFLOWS_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Clone upstream into scratch dir
+        id: clone
+        run: |
+          set -euo pipefail
+          tmp=$(mktemp -d)
+          git clone --depth 1 --branch "$UPSTREAM_REF" "$UPSTREAM_URL" "$tmp/wc"
+          UPSTREAM_SHA=$(git -C "$tmp/wc" rev-parse --short HEAD)
+          echo "tmp=$tmp" >> "$GITHUB_OUTPUT"
+          echo "sha=$UPSTREAM_SHA" >> "$GITHUB_OUTPUT"
+
+          # Drop the upstream's own .git + multi-MB screenshot folder so they
+          # don't end up tracked here. Mirror what the initial vendor did.
+          rm -rf "$tmp/wc/.git" "$tmp/wc/.github/screenshots"
+
+      - name: Create / reset sync branch
+        run: git checkout -B "$SYNC_BRANCH" main
+
+      - name: Mirror upstream into web-check/
+        run: |
+          set -euo pipefail
+          mkdir -p "$VENDOR_DIR"
+          rsync -a --delete \
+            --exclude='.git' \
+            "${{ steps.clone.outputs.tmp }}/wc/" "$VENDOR_DIR/"
+
+      - name: Stage and check for changes
+        id: diff
+        run: |
+          git add "$VENDOR_DIR"
+          if git diff --cached --quiet; then
+            echo "No web-check changes vs current vendor — nothing to sync."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            # Surface a short summary in the run log.
+            git diff --cached --stat | tail -20
+          fi
+
+      - name: Commit vendor refresh
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git commit -m "sync: refresh web-check/ from Lissy93/web-check@${{ steps.clone.outputs.sha }}"
+
+      # Worker build is independent of web-check/, but run it anyway as a
+      # cheap guard against accidental cross-contamination (e.g. someone
+      # later adding a root-level import that touches the vendor tree).
+      - name: Setup Node
+        if: steps.diff.outputs.changed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        if: steps.diff.outputs.changed == 'true'
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+
+      - name: Verify Worker bundle still builds
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          npm run build
+          test -s dist/worker.js || (echo "::error::Worker bundle build broke after web-check vendor refresh — should not happen"; exit 1)
+
+      - name: Push sync branch
+        if: steps.diff.outputs.changed == 'true'
+        run: git push --force-with-lease origin "$SYNC_BRANCH"
+
+      - name: Open / update PR
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.WORKFLOWS_PAT || secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TITLE="sync: web-check vendor refresh @${{ steps.clone.outputs.sha }}"
+          BODY=$(cat <<EOF
+          Automated refresh of the vendored
+          [\`Lissy93/web-check\`](https://github.com/Lissy93/web-check) tree
+          under \`web-check/\` from upstream **\`${UPSTREAM_REF}\`** at
+          \`${{ steps.clone.outputs.sha }}\`.
+
+          - Upstream \`.git\` and \`.github/screenshots/\` are dropped before
+            mirroring (matches the original vendor shape).
+          - Worker bundle build was run as a sanity check; web-check itself
+            is a separate Node app and is not built in CI here.
+          - Review the diff (especially \`web-check/api/\` and
+            \`web-check/server.js\`) before merging.
+
+          Triggered: ${{ github.event_name }} (ref \`${UPSTREAM_REF}\`)
+          EOF
+          )
+          if gh pr view "$SYNC_BRANCH" >/dev/null 2>&1; then
+            gh pr edit "$SYNC_BRANCH" --title "$TITLE" --body "$BODY"
+          else
+            gh pr create --base main --head "$SYNC_BRANCH" \
+              --title "$TITLE" --body "$BODY" \
+              --label upstream-sync || \
+            gh pr create --base main --head "$SYNC_BRANCH" \
+              --title "$TITLE" --body "$BODY"
+          fi

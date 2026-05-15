@@ -49,8 +49,55 @@ After the deploy you'll have:
 See [`docs/DEEPMARKET_API.md`](./docs/DEEPMARKET_API.md) for the full request /
 response shape and an optional `DEEPMARKET_API_KEY` secret to gate access.
 
-`main` auto-syncs from upstream weekly via
-[`.github/workflows/sync-upstream.yml`](.github/workflows/sync-upstream.yml).
+Both upstreams (`serverless-dns/serverless-dns` and the vendored
+`Lissy93/web-check`) are tracked automatically by sync workflows that open
+a PR — never a direct push to `main` — gated by an inline `npm run build`
+smoke check. See [`docs/UPSTREAM_SYNC.md`](./docs/UPSTREAM_SYNC.md) for the
+flow, failure runbook, and the optional `WORKFLOWS_PAT` secret that lights
+up downstream CI on sync PRs.
+
+#### Combined: DNS proxy + Web-Check security audit
+
+This repo now ships as a small security suite: the serverless DNS proxy above
+plus [Lissy93/web-check](https://github.com/Lissy93/web-check) (MIT)
+vendored under [`web-check/`](./web-check). Web-Check is a website
+security/audit dashboard covering SSL, security headers, DNS, mail config
+(SPF/DMARC/BIMI), technology stack, redirects, open ports, CO₂ footprint,
+and ~30 other checks.
+
+Layout:
+
+```
+.                # serverless-dns (Cloudflare Workers / Deno / Fastly / Fly)
+├── src/         # DNS resolver source
+├── wrangler.toml
+└── web-check/   # Lissy93/web-check — Node + Astro audit GUI + API (MIT)
+```
+
+The two pieces target different runtimes (DNS proxy → edge workers,
+Web-Check → Node + Chromium) and deploy independently. Bundling them in one
+fork means a single deploy gives you a private DoH resolver *and* the audit
+GUI you can point at any host.
+
+Run Web-Check locally:
+
+```sh
+docker compose up --build web-check          # → http://localhost:3000
+# or, without Docker:
+cd web-check && yarn install && yarn build && yarn start
+```
+
+Run the DNS worker locally (miniflare):
+
+```sh
+docker compose --profile dns up --build dns-worker   # → http://localhost:8787
+# or directly:
+npx wrangler dev --local
+```
+
+Deploy each to its respective platform as usual — Web-Check ships its own
+`Dockerfile`, `fly.toml`, `netlify.toml`, and `vercel.json` under
+`web-check/`; the DNS worker uses the top-level `wrangler.toml`.
 
 For step-by-step instructions, refer:
 

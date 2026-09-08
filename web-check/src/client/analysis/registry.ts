@@ -19,6 +19,7 @@ import tlsConnection from './rules/tls-connection';
 import tlsSecurityAudit from './rules/tls-security-audit';
 import quality from './rules/quality';
 import socialTags from './rules/social-tags';
+import socialPresence from './rules/social-presence';
 import whois from './rules/whois';
 import status from './rules/status';
 import redirects from './rules/redirects';
@@ -45,6 +46,7 @@ export const analyzers: Record<string, Analyzer> = {
   'tls-security-audit': tlsSecurityAudit,
   quality,
   'social-tags': socialTags,
+  'social-presence': socialPresence,
   whois,
   status,
   redirects,

@@ -21,6 +21,8 @@ const directChromiumScreenshot = async (url) => {
       '--headless',
       '--disable-gpu',
       '--no-sandbox',
+      // Headless picks its own size otherwise, this keeps it matching the puppeteer fallback
+      '--window-size=800,600',
       `--screenshot=${screenshotPath}`,
       url,
     ];

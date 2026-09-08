@@ -1,4 +1,5 @@
 import { bracketIPv6 } from './parse-target.js';
+import { shouldSkip } from './check-skipper.js';
 
 const normalizeUrl = (url) => {
   const withScheme = url.startsWith('http') ? url : `https://${url}`;
@@ -9,9 +10,6 @@ const TIMEOUT = parseInt(process.env.PUBLIC_API_TIMEOUT_LIMIT || '40000', 10);
 
 // If present, set CORS allowed origins for responses
 const ALLOWED_ORIGINS = process.env.API_CORS_ORIGIN || '*';
-
-// Disable everything :( Setting this env var will turn off the instance, and show message
-const DISABLE_EVERYTHING = !!process.env.VITE_DISABLE_EVERYTHING;
 
 // Set the platform currently being used
 let PLATFORM = 'NETLIFY';
@@ -26,7 +24,6 @@ if (process.env.PLATFORM) {
 // Define the headers to be returned with each response
 const headers = {
   'Access-Control-Allow-Origin': ALLOWED_ORIGINS,
-  'Access-Control-Allow-Credentials': true,
   'Content-Type': 'application/json;charset=UTF-8',
 };
 
@@ -39,13 +36,6 @@ const timeoutErrorMsg =
   `The public instance currently has a lower timeout of ${TIMEOUT}ms ` +
   'in order to keep running costs affordable, so that Web Check can ' +
   'remain freely available for everyone.';
-
-const disabledMsg =
-  'WebCheck is temporarily disabled.\n\n' +
-  'Due to the increased cost of running Web Check, the public instance has been ' +
-  'paused while we look for affordable ways to keep it free for everyone.\n' +
-  'Since the code is free and open source, you can run your own instance by ' +
-  'following the instructions in the GitHub repo.';
 
 // A middleware function used by all API routes on all platforms
 const commonMiddleware = (handler) => {
@@ -60,20 +50,20 @@ const commonMiddleware = (handler) => {
 
   // Vercel
   const vercelHandler = async (request, response) => {
-    if (DISABLE_EVERYTHING) {
-      return response.status(200).json({ skipped: disabledMsg });
-    }
-
     const queryParams = request.query || {};
     const rawUrl = queryParams.url;
+
+    const { skip, reason } = shouldSkip(request.url, rawUrl);
+    if (skip) {
+      return response.status(200).json({ skipped: reason });
+    }
 
     if (!rawUrl) {
       return response.status(500).json({ error: 'No URL specified' });
     }
 
-    const url = normalizeUrl(rawUrl);
-
     try {
+      const url = normalizeUrl(rawUrl);
       const result = await Promise.race([handler(url, request), createTimeoutPromise(TIMEOUT)]);
       response.status(200).json(typeof result === 'object' ? result : JSON.parse(result));
     } catch (error) {
@@ -88,15 +78,17 @@ const commonMiddleware = (handler) => {
     const queryParams = event.queryStringParameters || event.query || {};
     const rawUrl = queryParams.url;
 
-    if (DISABLE_EVERYTHING) {
-      return { statusCode: 200, body: JSON.stringify({ skipped: disabledMsg }), headers };
+    const { skip, reason } = shouldSkip(event.path || event.rawUrl, rawUrl);
+    if (skip) {
+      return { statusCode: 200, body: JSON.stringify({ skipped: reason }), headers };
     }
+
     if (!rawUrl) {
       return { statusCode: 500, body: JSON.stringify({ error: 'No URL specified' }), headers };
     }
 
-    const url = normalizeUrl(rawUrl);
     try {
+      const url = normalizeUrl(rawUrl);
       const result = await Promise.race([
         handler(url, event, context),
         createTimeoutPromise(TIMEOUT),

@@ -125,25 +125,29 @@ jobs:
 
       - name: 🐳 Build Docker Image
         run: docker build -t web-check:test .
-        timeout-minutes: 10
+        timeout-minutes: 25
 
       - name: 🧪 Verify Container Starts
+        timeout-minutes: 5
         run: |
           docker run -d --name wc-test -p 3000:3000 web-check:test
-          sleep 5
-          STATUS=$(docker inspect -f '{{.State.Running}}' wc-test)
-          if [ "$STATUS" != "true" ]; then
-            echo "❌ Container failed to start"
+          for _ in $(seq 60); do
+            STATUS=$(docker inspect -f '{{.State.Health.Status}}' wc-test)
+            [ "$STATUS" = "starting" ] || break
+            sleep 2
+          done
+          if [ "$STATUS" != "healthy" ]; then
+            echo "❌ Container never became healthy (status: $STATUS)"
             docker logs wc-test
             exit 1
           fi
           HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/check || true)
           if [ "$HTTP_CODE" != "200" ]; then
-            echo "❌ Health check failed (HTTP $HTTP_CODE)"
+            echo "❌ GUI not serving (HTTP $HTTP_CODE)"
             docker logs wc-test
             exit 1
           fi
-          echo "✅ Container running and responding"
+          echo "✅ Container healthy and serving"
           docker stop wc-test && docker rm wc-test
 
   # security:

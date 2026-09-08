@@ -1,34 +1,54 @@
-import psl from 'psl';
 import middleware from './_common/middleware.js';
 import { httpGet } from './_common/http.js';
-import { parseTarget } from './_common/parse-target.js';
-import { upstreamError } from './_common/upstream.js';
+import { parseTarget, baseDomain } from './_common/parse-target.js';
 
 const MAX_SUBDOMAINS = 500;
+const SOURCE_TIMEOUT = 6000;
 const HOSTNAME_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 
-// Reduce a hostname to its registrable domain so we search the whole zone
-const baseDomain = (host) => psl.parse(host)?.domain || host;
-
-// Skip raw IPs, since CT logs are indexed by hostname not address
 const isIpAddress = (host) => /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':');
 
-// Flatten crt.sh rows into a clean, deduped list of valid subdomains under the base
-const collectSubdomains = (rows, base) => {
-  const suffix = `.${base}`;
-  const out = new Set();
-  for (const row of rows) {
-    const raw = row?.name_value;
-    if (typeof raw !== 'string') continue;
-    for (const part of raw.split('\n')) {
-      const name = part.trim().toLowerCase().replace(/^\*\./, '');
-      if (!name || name === base) continue;
-      if (!name.endsWith(suffix)) continue;
-      if (!HOSTNAME_RE.test(name)) continue;
-      out.add(name);
-    }
-  }
-  return [...out].sort();
+const certSpotter = async (domain) => {
+  const token = process.env.CERTSPOTTER_TOKEN;
+  const res = await httpGet('https://api.certspotter.com/v1/issuances', {
+    params: { domain, include_subdomains: 'true', expand: 'dns_names' },
+    headers: { Accept: 'application/json', ...(token && { Authorization: `Bearer ${token}` }) },
+    timeout: SOURCE_TIMEOUT,
+  });
+  if (!Array.isArray(res.data)) throw new Error('certSpotter returned an unexpected response');
+  return res.data.flatMap((row) => (Array.isArray(row?.dns_names) ? row.dns_names : []));
+};
+
+const crtSh = async (domain) => {
+  const res = await httpGet('https://crt.sh/', {
+    params: { q: `%.${domain}`, output: 'json' },
+    headers: { Accept: 'application/json' },
+    timeout: SOURCE_TIMEOUT,
+  });
+  if (!Array.isArray(res.data)) throw new Error('crt.sh returned an unexpected response');
+  return res.data.flatMap((row) => String(row?.name_value ?? '').split('\n'));
+};
+
+const hackerTarget = async (domain) => {
+  const res = await httpGet('https://api.hackertarget.com/hostsearch/', {
+    params: { q: domain },
+    timeout: SOURCE_TIMEOUT,
+  });
+  const body = typeof res.data === 'string' ? res.data : '';
+  if (!body || /error|api count|quota/i.test(body)) throw new Error('hackerTarget unavailable');
+  return body.split('\n').map((line) => line.split(',')[0]);
+};
+
+const SOURCES = [
+  { name: 'certSpotter', lookup: certSpotter },
+  { name: 'crt.sh', lookup: crtSh },
+  { name: 'hackerTarget', lookup: hackerTarget },
+];
+
+const isTransient = (error) => {
+  const status = error.response?.status;
+  if (status && status < 500) return false;
+  return true;
 };
 
 const subdomainsHandler = async (url) => {
@@ -40,31 +60,45 @@ const subdomainsHandler = async (url) => {
   if (!domain || !domain.includes('.')) {
     return { skipped: 'Could not resolve a registrable domain' };
   }
-  try {
-    const res = await httpGet('https://crt.sh/', {
-      params: { q: `%.${domain}`, output: 'json' },
-      headers: { Accept: 'application/json' },
-    });
-    if (!Array.isArray(res.data)) {
-      return { error: 'Certificate Transparency lookup returned unexpected data, please retry' };
+
+  const suffix = `.${domain}`;
+  const sieve = (names) =>
+    [
+      ...new Set(
+        names
+          .filter((n) => typeof n === 'string')
+          .map((n) => n.trim().toLowerCase().replace(/^\*\./, ''))
+          .filter((n) => n && n !== domain && n.endsWith(suffix) && HOSTNAME_RE.test(n)),
+      ),
+    ].sort();
+
+  let succeeded = 0;
+  const errors = [];
+  for (const source of SOURCES) {
+    try {
+      const subdomains = sieve(await source.lookup(domain));
+      succeeded += 1;
+      if (subdomains.length) {
+        return {
+          domain,
+          count: subdomains.length,
+          truncated: subdomains.length > MAX_SUBDOMAINS,
+          subdomains: subdomains.slice(0, MAX_SUBDOMAINS),
+          source: source.name,
+        };
+      }
+    } catch (error) {
+      errors.push(error);
     }
-    const all = collectSubdomains(res.data, domain);
-    if (!all.length) {
-      return {
-        skipped: `No subdomains found for ${domain} in Certificate Transparency logs`,
-        retryable: true,
-      };
-    }
-    return {
-      domain,
-      count: all.length,
-      truncated: all.length > MAX_SUBDOMAINS,
-      subdomains: all.slice(0, MAX_SUBDOMAINS),
-      source: 'crt.sh',
-    };
-  } catch (error) {
-    return upstreamError(error, 'Subdomain lookup');
   }
+
+  if (succeeded) {
+    return { skipped: `No subdomains found for ${domain} in Certificate Transparency logs` };
+  }
+  return {
+    error: 'Subdomain lookup is temporarily unavailable for this domain',
+    retryable: errors.some(isTransient),
+  };
 };
 
 export const handler = middleware(subdomainsHandler);

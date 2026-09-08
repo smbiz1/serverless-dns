@@ -16,6 +16,13 @@
 <table align="center">
   <tr>
     <td align="center" width="33%">
+      <a href="https://nubela.co/?utm_source=github&utm_medium=sponsorship&utm_campaign=oss_sponsorships&utm_content=github_readme&utm_id=web_check_2026">
+        <img src="https://pixelflare.cc/alicia/sponsors/ninja-pear.png" width="260" alt="NinjaPear"><br>
+        <b>NinjaPear</b>
+      </a><br>
+      <sub>API to get a full B2B profiles from any URL</sub>
+    </td>
+    <td align="center" width="33%">
       <a href="https://terminaltrove.com/?utm_campaign=github&utm_medium=referral&utm_content=web-check&utm_source=wcgh">
         <img src="https://pixelflare.cc/alicia/sponsors/terminal-trove.png" width="260" alt="Terminal Trove"><br>
         <b>Terminal Trove</b>
@@ -28,13 +35,6 @@
         <b>Warp</b>
       </a><br>
       <sub>Built for coding with multiple AI agents</sub>
-    </td>
-    <td align="center" width="33%">
-      <a href="https://uruky.com?ref=lissy93">
-	  <img src="https://pixelflare.cc/alicia/sponsors/uruky/w512" width="260" alt="Uruky"><br>
-	  <b>Uruky</b>
-	  </a><br>
-	  <sub>Private EU-based search, no ads or logs</sub>
     </td>
   </tr>
 </table>
@@ -51,7 +51,8 @@
     - [Option#1: Netlify](#deploying---option-1-netlify)
     - [Option#2: Vercel](#deploying---option-2-vercel)
     - [Option#3: Docker](#deploying---option-3-docker)
-    - [Option#4: Source](#deploying---option-4-from-source)
+    - [Option#4: Render](#deploying---option-4-render)
+    - [Option#5: Source](#deploying---option-5-from-source)
   - [Configuration Options](#configuring)
   - [Developer Setup](#developing)
 - **[Community](#community)**
@@ -187,7 +188,7 @@ Cookies can disclose information about how the website tracks and interacts with
 - [HTTP Cookie Docs (Mozilla)](https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies)
 - [What are Cookies (via Cloudflare Learning)](https://www.cloudflare.com/learning/privacy/what-are-cookies/)
 - [Testing for Cookie Attributes (OWASP)](https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/06-Session_Management_Testing/02-Testing_for_Cookies_Attributes)
-- [RFC-6265 - Coolies](https://tools.ietf.org/html/rfc6265)
+- [RFC-6265 - Cookies](https://tools.ietf.org/html/rfc6265)
 
 </details>
 <details>
@@ -266,7 +267,7 @@ The Server Location task determines the physical location of the server hosting 
 
 ###### Use Cases
 
-Knowing the server location is a good first step in better understanding a website. For site owners this aids in optimizing content delivery, ensuring compliance with data residency requirements, and identifying potential latency issues that may impact user experience in specific geographical regions. And for security researcher, assess the risk posed by specific regions or jurisdictions regarding cyber threats and regulations.
+Knowing the server location is a good first step in better understanding a website. For site owners this aids in optimizing content delivery, ensuring compliance with data residency requirements, and identifying potential latency issues that may impact user experience in specific geographical regions. And for security researchers, it helps assess the risk posed by specific regions or jurisdictions regarding cyber threats and regulations.
 
 ###### Useful Links
 
@@ -384,10 +385,10 @@ In OSINT investigations, traceroute can provide insights about the routing paths
 
 ###### Useful Links
 
-- [undefined](function link() { [native code] })
-- [undefined](function link() { [native code] })
-- [undefined](function link() { [native code] })
-- [undefined](function link() { [native code] })
+- [Traceroute - Wiki](https://en.wikipedia.org/wiki/Traceroute)
+- [What is Traceroute (via Cloudflare Learning)](https://www.cloudflare.com/learning/network-layer/what-is-traceroute/)
+- [How to Use Traceroute (via Linode)](https://www.linode.com/docs/guides/linux-traceroute/)
+- [Visual Traceroute Tool](https://gsuite.tools/traceroute)
 
 </details>
 <details>
@@ -653,6 +654,29 @@ Adding this data to your site will boost SEO, and as an OSINT researcher it can 
 
 </details>
 <details>
+<summary><b>Social Presence</b></summary>
+
+<img width="300" src="https://pixelflare.cc/alicia/web-check/wc-social" align="right" />
+
+###### Description
+
+Finds the social accounts a site says are its own, by reading its meta tags, structured data and `rel="me"` links, then looks each one up on the network itself. X, Mastodon, Bluesky and GitHub are supported. Bluesky is also checked against the domain directly, because there a handle can be the domain name.
+
+Every lookup uses free, public endpoints, so no API keys or accounts are needed. Setting `GITHUB_TOKEN` is optional, and only raises GitHub's unauthenticated rate limit.
+
+###### Use Cases
+
+Confirms that the accounts a website points to actually exist, and that they point back to the website in return. A mismatch is worth knowing about: phishing pages routinely claim the social accounts of the brand they impersonate, and a link that only goes one way proves nothing about who owns the account.
+
+###### Useful Links
+
+- [IndieWeb: rel-me](https://indieweb.org/rel-me)
+- [Mastodon link verification](https://docs.joinmastodon.org/user/profile/#verification)
+- [Bluesky domain handles](https://bsky.social/about/blog/4-28-2023-domain-handle-tutorial)
+- [Schema.org sameAs](https://schema.org/sameAs)
+
+</details>
+<details>
 <summary><b>Email Configuration</b></summary>
 
 <img width="300" src="https://pixelflare.cc/alicia/web-check/wc-email" align="right" />
@@ -899,7 +923,15 @@ You can get the Docker image from:
 
 </details>
 
-### Deploying - Option #4: From Source
+### Deploying - Option #4: Render
+
+Click the button below, to deploy to Render 👇
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/Lissy93/web-check)
+
+Uses the official [`lissy93/web-check`](https://hub.docker.com/r/lissy93/web-check) image on a Standard web service. Optional enrichment API keys can be added after deploy.
+
+### Deploying - Option #5: From Source
 
 Install the prerequisites listed in the [Developing](#developing) section, then run:
 
@@ -908,7 +940,7 @@ git clone https://github.com/Lissy93/web-check.git  # Download the code from Git
 cd web-check                                        # Navigate into the project dir
 yarn install                                        # Install the NPM dependencies
 yarn build                                          # Build the app for production
-yarn serve                                          # Start the app (API and GUI)
+yarn start                                          # Start the app (API and GUI)
 ```
 
 ---
@@ -923,14 +955,14 @@ But there are some optional environmental variables that you can set to give you
 
 | Key                        | Value                                                                                                                                                 |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GOOGLE_CLOUD_API_KEY`     | A Google API key ([get here](https://cloud.google.com/api-gateway/docs/authenticate-api-keys)). This can be used to return quality metrics for a site |
+| `GOOGLE_CLOUD_API_KEY`     | A Google API key with the PageSpeed Insights API enabled ([get here](https://developers.google.com/speed/docs/insights/v5/get-started)). This can be used to return quality metrics for a site |
 | `REACT_APP_SHODAN_API_KEY` | A Shodan API key ([get here](https://account.shodan.io/)). This will show associated host names for a given domain                                    |
 | `REACT_APP_WHO_API_KEY`    | A WhoAPI key ([get here](https://whoapi.com/)). This will show more comprehensive WhoIs records than the default job                                  |
 
 <details>
   <summary><small>Full / Upcoming Vals</small></summary>
 
-- `GOOGLE_CLOUD_API_KEY` - A Google API key ([get here](https://cloud.google.com/api-gateway/docs/authenticate-api-keys)). This can be used to return quality metrics for a site
+- `GOOGLE_CLOUD_API_KEY` - A Google API key with the PageSpeed Insights API enabled ([get here](https://developers.google.com/speed/docs/insights/v5/get-started)). This can be used to return quality metrics for a site
 - `REACT_APP_SHODAN_API_KEY` - A Shodan API key ([get here](https://account.shodan.io/)). This will show associated host names for a given domain
 - `REACT_APP_WHO_API_KEY` - A WhoAPI key ([get here](https://whoapi.com/)). This will show more comprehensive WhoIs records than the default job
 - `SECURITY_TRAILS_API_KEY` - A Security Trails API key ([get here](https://securitytrails.com/corp/api)). This will show org info associated with the IP
@@ -951,6 +983,9 @@ But there are some optional environmental variables that you can set to give you
 | `API_ENABLE_RATE_LIMIT`    | Enable rate-limiting for the /api endpoints (e.g. `true`)                  |
 | `PUBLIC_API_TIMEOUT_LIMIT` | The timeout limit for API requests, in milliseconds (e.g. `25000`)         |
 | `API_CORS_ORIGIN`          | Enable CORS, by setting your allowed hostname(s) here (e.g. `example.com`) |
+| `API_DISABLED_CHECKS`      | Comma-separated list of checks to disable (e.g. `trace-route,ports`)       |
+| `API_ENABLED_CHECKS`       | If set, only these checks will run (e.g. `get-ip,ssl,dns,headers`)         |
+| `API_BLOCKED_HOSTS`        | Hosts that must never be scanned (e.g. `lan.example.com,192.168.0.0/16`)   |
 | `CHROME_PATH`              | The path the Chromium executable (e.g. `/usr/bin/chromium`)                |
 | `DISABLE_GUI`              | Disable the GUI, and only serve the API (e.g. `false`)                     |
 | `REACT_APP_API_ENDPOINT`   | The endpoint for the API, either local or remote (e.g. `/api`)             |
@@ -970,7 +1005,7 @@ Note that keys that are prefixed with `REACT_APP_` are used client-side, and as 
 3. Install dependencies: `yarn`
 4. Start the dev server, with `yarn dev`
 
-You'll need [Node.js](https://nodejs.org/en) (V 18.16.1 or later) installed, plus [yarn](https://yarnpkg.com/getting-started/install) as well as [git](https://git-scm.com/).
+You'll need [Node.js](https://nodejs.org/en) (v22.12 or later) installed, plus [yarn](https://yarnpkg.com/getting-started/install) as well as [git](https://git-scm.com/).
 Some checks also require `chromium`, `traceroute` and `dns` to be installed within your environment. These jobs will just be skipped if those packages aren't present.
 
 ---
